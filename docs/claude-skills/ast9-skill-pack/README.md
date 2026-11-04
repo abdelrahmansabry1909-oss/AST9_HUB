@@ -6,12 +6,12 @@ Claude guard skills. The skills run from `.claude/skills/`, but that path is git
 so the runtime copy is local-only and would be lost if the worktree is removed. This tracked
 copy under `docs/` preserves them and lets anyone reinstall or review them.
 
-Parent workflow doc: [`AI_WORKFLOW_GUARDRAILS.md`](../../../AI_WORKFLOW_GUARDRAILS.md). These seven
+Parent workflow doc: [`AI_WORKFLOW_GUARDRAILS.md`](../../../AI_WORKFLOW_GUARDRAILS.md). These ten
 skills are the project-specific extension of those mandatory guardrails.
 
 ## 1. What the AST9 skills pack is
 
-A set of seven project-authored Claude skills that encode the **real regressions and process
+A set of ten project-authored Claude skills that encode the **real regressions and process
 mistakes already hit during AST9/NeuCore development**, and force the correct checklist before
 similar changes are made again. Each skill is a directory containing a `SKILL.md` with YAML
 frontmatter (`name`, `description`) whose `description` is a trigger paragraph that lets Claude
@@ -22,7 +22,7 @@ These are **separate** from the general-purpose marketplace guard skills already
 from `amElnagdy/guard-skills` and are tracked by `skills-lock.json`. The AST9 pack is
 project-specific and authored in-repo.
 
-## 2. The eight skills
+## 2. The ten skills
 
 | Skill | Scope |
 |---|---|
@@ -34,6 +34,8 @@ project-specific and authored in-repo.
 | `ast9-cleanup-archive-guard` | File/folder deletion, archiving, and `git worktree` retirement safety. |
 | `ast9-production-verification-guard` | Post-merge/deploy verification and honest smoke labeling (no overclaiming). |
 | `ast9-frontend-delivery-guard` | Writing and reporting frontend changes: prove every identifier exists, edit minimally, test in a browser, and never label an unrun check as passed. |
+| `ast9-supabase-backend-guard` | All Supabase backend work: migrations, RLS policies, RPCs, `SECURITY DEFINER` functions, triggers, `pg_cron`, and applying anything to the production database. |
+| `ast9-payments-webhook-guard` | Payments, billing activation, and provider webhooks (Paymob primary, provider-neutral): HMAC verification, server-side price resolution, idempotency, and the `payment_events` ledger. |
 
 ## 3. Which AST9 failure each skill prevents
 
@@ -74,6 +76,18 @@ project-specific and authored in-repo.
   Save button off-screen; and the same change reported as done in two consecutive rounds while absent from
   the diff both times. Enforces: grep every identifier before referencing it, edit minimally, run the code
   in a browser, and never write "PASS (Code Verified)".
+- **`ast9-supabase-backend-guard`** — frontend-only permission checks (a section hidden in JS while the
+  table stays readable by any authenticated user — the frontend is UX, **RLS is the authorization
+  boundary**); `SECURITY DEFINER` privilege escalation via a mutable `search_path` or a grant to
+  `anon`/`authenticated` where service-role-only was meant; non-idempotent money/period operations that
+  double-apply on a retried call; destructive migrations run on prod without approval or backup;
+  weakening the owner-only admin model; and leaving test rows or printing real emails/PII/health data
+  during a smoke.
+- **`ast9-payments-webhook-guard`** — granting paid access from a client-side "success" redirect
+  (trivially spoofable by editing the URL); processing an unverified webhook payload; trusting
+  client-supplied amount/currency/plan (pay 1 EGP, get the annual plan); replaying or double-processing
+  a retried webhook; leaking the HMAC secret or API keys into the repo, logs, or chat; storing card
+  data or raw PII in the ledger; and float rounding drift on money.
 
 ## 4. Active runtime location
 
@@ -83,8 +97,18 @@ Claude Code discovers and auto-activates project skills from:
 .claude/skills/<skill-name>/SKILL.md
 ```
 
-The six AST9 skills are installed there now and register automatically on load. **That path is
-gitignored**, so it is the *runtime* copy, not the canonical source.
+Skills in that path register automatically on load. **That path is gitignored**, so it is the
+*runtime* copy, not the canonical source.
+
+Be aware the runtime copies drift and can be **split across checkouts**. As of 2026-11-04 no single
+`.claude/skills/` held all ten: the main checkout had eight (missing `ast9-supabase-backend-guard`
+and `ast9-payments-webhook-guard`) while a worktree had nine (missing `ast9-decision-journal` and
+`ast9-frontend-delivery-guard`). This `docs/` copy is the only complete set — reinstall from it
+(§6) rather than copying between runtime locations.
+
+When comparing a runtime copy against this one, **normalize line endings first**. `core.autocrlf`
+is `true`, so git stores LF while the working files are CRLF; a naive `diff` reports every line as
+changed and makes an identical file look stale. Use `diff --strip-trailing-cr`.
 
 ## 5. This folder is the durable canonical copy
 
